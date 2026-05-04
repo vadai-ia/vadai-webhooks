@@ -9,6 +9,21 @@ import { createServerClient } from "@supabase/ssr";
  * Privadas: el resto (principalmente /dashboard/*).
  */
 export async function proxy(request: NextRequest) {
+  // ─── HTTP → HTTPS upgrade ────────────────────────────────────────────────
+  // Railway termina TLS en su edge y nos pasa `x-forwarded-proto`. Si llegó
+  // por http, redirigimos a la misma URL en https. 308 (no 301) preserva el
+  // método HTTP — crítico para POST a /in/[token] desde clientes externos.
+  // En local dev el header no existe, así que no hay redirect.
+  const forwardedProto = request.headers.get("x-forwarded-proto");
+  const host = request.headers.get("host");
+  if (forwardedProto === "http" && host) {
+    const httpsUrl = new URL(
+      request.nextUrl.pathname + request.nextUrl.search,
+      `https://${host}`
+    );
+    return NextResponse.redirect(httpsUrl, 308);
+  }
+
   // Response que iremos mutando con las cookies que escriba @supabase/ssr.
   let response = NextResponse.next({ request });
 
