@@ -1042,6 +1042,27 @@ export type Database = {
         }
         Relationships: []
       }
+      vw_allowed_users: {
+        Row: {
+          added_at: string | null
+          added_by: string | null
+          email: string
+          notes: string | null
+        }
+        Insert: {
+          added_at?: string | null
+          added_by?: string | null
+          email: string
+          notes?: string | null
+        }
+        Update: {
+          added_at?: string | null
+          added_by?: string | null
+          email?: string
+          notes?: string | null
+        }
+        Relationships: []
+      }
       vw_configs: {
         Row: {
           client_name: string | null

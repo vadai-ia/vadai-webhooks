@@ -162,8 +162,12 @@ Si `status='failed'`: card de error con `error_message` y `error_stack` collapsa
 ## Auth
 
 - `proxy.ts` (Next 16, no `middleware.ts`) redirige a `/login` si no hay sesión
-- Magic link Supabase Auth
-- Validar dominio antes de enviar magic link: solo `@vadai.com.mx`
+- **Email + password** (Supabase `signInWithPassword`)
+- Tabla `vw_allowed_users` controla quién puede entrar (no hay filtro por dominio)
+- Login server action chequea `vw_allowed_users` con service_role ANTES de intentar `signInWithPassword`. Esto evita leakear si una password es válida para una cuenta que no está en la allowlist.
+- Para dar acceso a alguien:
+  1. Crear el usuario en Supabase Auth (Authentication → Users → Add user)
+  2. `INSERT INTO vw_allowed_users (email) VALUES ('persona@dominio.com')`
 - Endpoints `/in/*` son públicos (sin auth de usuario)
 
 ## Lo que NO se hace

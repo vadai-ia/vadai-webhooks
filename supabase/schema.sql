@@ -84,20 +84,43 @@ CREATE INDEX vw_executions_idemp_idx    ON vw_executions(webhook_slug, idempoten
 
 
 -- ============================================================
--- 3. RLS — solo usuarios @vadai.com.mx
+-- 3. ALLOWLIST de usuarios autorizados
+-- ============================================================
+-- Reemplaza el filtro por dominio (@vadai.com.mx). Para dar acceso a
+-- alguien:
+--   1. Crear el usuario en Authentication → Users (Supabase dashboard)
+--   2. Insertar su email aquí: INSERT INTO vw_allowed_users (email) VALUES (...)
+-- ============================================================
+CREATE TABLE vw_allowed_users (
+  email      TEXT         PRIMARY KEY,
+  added_at   TIMESTAMPTZ  DEFAULT NOW(),
+  added_by   UUID         REFERENCES auth.users(id),
+  notes      TEXT
+);
+
+ALTER TABLE vw_allowed_users ENABLE ROW LEVEL SECURITY;
+
+-- Cualquier usuario autenticado puede ver SU PROPIO row.
+CREATE POLICY "self_can_read_own_access" ON vw_allowed_users
+  FOR SELECT TO authenticated
+  USING (email = (auth.jwt() ->> 'email'));
+
+
+-- ============================================================
+-- 4. RLS — usuarios en la allowlist
 -- ============================================================
 ALTER TABLE vw_configs ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "vadai_users_all" ON vw_configs
+CREATE POLICY "allowed_users_all" ON vw_configs
   FOR ALL TO authenticated
-  USING (auth.jwt() ->> 'email' LIKE '%@vadai.com.mx')
-  WITH CHECK (auth.jwt() ->> 'email' LIKE '%@vadai.com.mx');
+  USING ((auth.jwt() ->> 'email') IN (SELECT email FROM vw_allowed_users))
+  WITH CHECK ((auth.jwt() ->> 'email') IN (SELECT email FROM vw_allowed_users));
 
 ALTER TABLE vw_executions ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "vadai_users_read" ON vw_executions
+CREATE POLICY "allowed_users_read" ON vw_executions
   FOR SELECT TO authenticated
-  USING (auth.jwt() ->> 'email' LIKE '%@vadai.com.mx');
+  USING ((auth.jwt() ->> 'email') IN (SELECT email FROM vw_allowed_users));
 
 -- El endpoint /in/[token] usa service_role_key que bypassa RLS
 -- para insertar/actualizar `vw_executions` sin sesión de usuario.

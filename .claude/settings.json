@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git --version)",
+      "Bash(gh --version)",
+      "Bash(git init *)",
+      "Bash(pnpm --version)",
+      "Bash(npm --version)",
+      "Bash(pnpm create *)",
+      "Bash(pnpm add *)",
+      "Bash(pnpm dlx *)",
+      "Bash(pnpm tsc *)",
+      "Bash(pnpm build *)",
+      "Bash(pnpm lint *)",
+      "Bash(supabase --version)",
+      "Bash(npx supabase *)",
+      "Bash(git check-ignore *)",
+      "Bash(pnpm install *)"
+    ]
+  }
+}
