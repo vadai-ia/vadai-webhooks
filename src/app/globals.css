@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+/* ============================================================
+   VADAI brand palette + base tokens (Tailwind v4)
+   - Tailwind v4 deriva utilidades automáticamente desde --color-*
+     definidos dentro de @theme. Ejemplo:
+       --color-vadai-cyan  →  bg-vadai-cyan, text-vadai-cyan, border-vadai-cyan
+   - Forzamos dark mode: el branding es dark-only.
+   ============================================================ */
+
+@theme {
+  /* Brand */
+  --color-vadai-cyan:        #00b8e6;
+  --color-vadai-cyan-light:  #0dd3f5;
+  --color-vadai-navy:        #05080f;
+  --color-vadai-navy-mid:    #111827;
+  --color-vadai-navy-light:  #0a1020;
+  --color-vadai-text:        #f0f4f8;
+  --color-vadai-muted:       #8899aa;
+  --color-vadai-success:     #34d399;
+  --color-vadai-warning:     #fbbf24;
+  --color-vadai-error:       #f87171;
+
+  /* Aliases semánticos para layout y shadcn */
+  --color-background: var(--color-vadai-navy);
+  --color-foreground: var(--color-vadai-text);
+
+  /* Tipografía */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, "SFMono-Regular", monospace;
+}
+
+html,
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

@@ -1,4 +1,8 @@
+@AGENTS.md
+
 # CLAUDE.md — VADAI Webhooks Service
+
+> ⚠️ **Antes de tocar código de Next.js:** lee la doc relevante en `node_modules/next/dist/docs/`. Esto es Next.js 16 — varias APIs cambiaron respecto a versiones anteriores. Ver `AGENTS.md`.
 
 ## Contexto
 
@@ -17,12 +21,16 @@ Replica el patrón de N8N pero con backend custom en TypeScript: la lógica de c
 
 ## Stack (FINAL — no agregar dependencias sin discutirlo)
 
-- Next.js 15 App Router (modo `next start`, no serverless)
-- TypeScript estricto
-- Supabase (Postgres + Auth) — solo `@supabase/supabase-js` y `@supabase/ssr`
-- Tailwind + shadcn/ui (dark theme VADAI)
-- Zod (solo en handlers)
-- pnpm
+- **Next.js 16** App Router (modo `next start`, no serverless)
+  - `proxy.ts` (NO `middleware.ts` — fue renombrado en Next 16)
+  - `params: Promise<{}>` en route handlers y pages
+  - `after()` desde `next/server` para procesamiento background
+- **TypeScript** estricto
+- **Tailwind v4** — config CSS-based en `globals.css` con `@theme` (NO `tailwind.config.ts`)
+- **Supabase** (Postgres + Auth) — solo `@supabase/supabase-js` y `@supabase/ssr`
+- **shadcn/ui** (dark theme VADAI)
+- **Zod** (solo en handlers)
+- **pnpm**
 - Deploy: Railway
 
 **SIN:** Drizzle, Prisma, BullMQ, Redis, nanoid, Realtime de Supabase (al inicio).
@@ -96,23 +104,24 @@ export const handlers = new Map([[miHandler.slug, miHandler]]);
 
 ## Branding visual
 
-```ts
-// tailwind.config.ts colors
-vadai: {
-  cyan:        '#00b8e6',
-  'cyan-light': '#0dd3f5',
-  navy:        '#05080f',
-  'navy-mid':  '#111827',
-  'navy-light': '#0a1020',
-  text:        '#f0f4f8',
-  muted:       '#8899aa',
-  success:     '#34d399',
-  warning:     '#fbbf24',
-  error:       '#f87171',
-}
+Paleta VADAI (definida como CSS vars en `src/app/globals.css` bajo `@theme`):
+
+```css
+--color-vadai-cyan:        #00b8e6;
+--color-vadai-cyan-light:  #0dd3f5;
+--color-vadai-navy:        #05080f;
+--color-vadai-navy-mid:    #111827;
+--color-vadai-navy-light:  #0a1020;
+--color-vadai-text:        #f0f4f8;
+--color-vadai-muted:       #8899aa;
+--color-vadai-success:     #34d399;
+--color-vadai-warning:     #fbbf24;
+--color-vadai-error:       #f87171;
 ```
 
-- Dark mode siempre
+Uso en clases: `bg-vadai-navy`, `text-vadai-cyan`, etc. (Tailwind v4 deriva las utilidades de `--color-*` automáticamente).
+
+- Dark mode siempre (forzado por `data-theme` o clase en `<html>`)
 - Sans: Inter / Mono: JetBrains Mono
 - Iconos: lucide-react
 - Sin gradientes
@@ -152,7 +161,7 @@ Si `status='failed'`: card de error con `error_message` y `error_stack` collapsa
 
 ## Auth
 
-- Middleware redirige a `/login` si no hay sesión
+- `proxy.ts` (Next 16, no `middleware.ts`) redirige a `/login` si no hay sesión
 - Magic link Supabase Auth
 - Validar dominio antes de enviar magic link: solo `@vadai.com.mx`
 - Endpoints `/in/*` son públicos (sin auth de usuario)
@@ -181,38 +190,43 @@ Soy Alejandro, fundador de VADAI.
 ## Tareas iniciales (ORDEN ESTRICTO)
 
 ### Fase 1 — Core MVP (sin handlers)
-1. `pnpm create next-app vadai-webhooks --ts --tailwind --app --src-dir --import-alias "@/*"`
-2. Tailwind config con paleta VADAI
-3. `pnpm add @supabase/supabase-js @supabase/ssr zod lucide-react sonner class-variance-authority clsx tailwind-merge`
-4. `pnpm dlx shadcn@latest init` + componentes listados
-5. `lib/supabase/{server,client,service-role}.ts`
-6. `lib/db-types.ts` (generado con `supabase gen types`)
-7. `types/webhook.ts`
-8. `lib/step-logger.ts`
-9. `lib/webhook-runner.ts` (sin handlers todavía, registry vacío)
-10. `handlers/_types.ts` y `handlers/_registry.ts`
-11. `app/in/[token]/route.ts`
-12. `app/login/page.tsx` y `app/auth/callback/route.ts`
-13. `middleware.ts`
-14. `app/dashboard/layout.tsx` (sidebar VADAI)
-15. `app/dashboard/page.tsx` (lista webhooks)
-16. `app/dashboard/new/page.tsx` (crear)
-17. `app/dashboard/[slug]/page.tsx` (lista ejecuciones)
-18. `app/dashboard/[slug]/[execId]/page.tsx` (detalle con timeline)
-19. README + variables de entorno documentadas
-20. **STOP. Smoke test antes de Fase 2.**
+
+**1a — Scaffold + estilo (✅ hecho)**
+- `pnpm create next-app` con `--typescript --tailwind --eslint --app --src-dir --import-alias "@/*" --use-pnpm --turbopack`
+- Tailwind v4 con paleta VADAI en `globals.css`
+- shadcn/ui init + componentes base
+
+**1b — Backend infra**
+- `lib/supabase/{server,client,service-role}.ts`
+- `lib/db-types.ts` (generado con `supabase gen types`)
+- `types/webhook.ts`
+- `lib/step-logger.ts`
+- `lib/webhook-runner.ts` (sin handlers todavía, registry vacío)
+- `handlers/_types.ts` y `handlers/_registry.ts`
+- `app/in/[token]/route.ts`
+- `app/login/page.tsx` y `app/auth/callback/route.ts`
+- `proxy.ts` (NO `middleware.ts` — Next 16)
+
+**1c — Dashboard UI**
+- `app/dashboard/layout.tsx` (sidebar VADAI)
+- `app/dashboard/page.tsx` (lista webhooks)
+- `app/dashboard/new/page.tsx` (crear)
+- `app/dashboard/[slug]/page.tsx` (lista ejecuciones)
+- `app/dashboard/[slug]/[execId]/page.tsx` (detalle con timeline)
+- README + variables de entorno documentadas
+- **STOP. Smoke test antes de Fase 2.**
 
 ### Fase 2 — Deploy
-21. Push a GitHub
-22. Railway: deploy + custom domain + env vars
-23. Smoke test desde producción con curl
-24. **STOP. Validar que crear webhook + recibir POST + ver en dashboard funciona end-to-end.**
+- Push a GitHub
+- Railway: deploy + custom domain + env vars
+- Smoke test desde producción con curl
+- **STOP. Validar que crear webhook + recibir POST + ver en dashboard funciona end-to-end.**
 
 ### Fase 3 — Primer handler real
-25. Crear `handlers/genco-odoo.ts` con specs en `docs/genco-odoo-spec.md`
-26. Registrar en `_registry.ts`
-27. Cambiar status del webhook config a `active` desde el frontend
-28. Validar con payload real
+- Crear `handlers/genco-odoo.ts` con specs en `docs/genco-odoo-spec.md`
+- Registrar en `_registry.ts`
+- Cambiar status del webhook config a `active` desde el frontend
+- Validar con payload real
 
 ## Validaciones pre-commit
 
