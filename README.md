@@ -48,10 +48,12 @@ Ver [.env.example](./.env.example). Se requieren:
 
 ## Schema de DB
 
-El SQL completo está en el documento de setup interno. Tablas:
+El SQL completo vive en [`supabase/schema.sql`](./supabase/schema.sql). Pegarlo en el SQL Editor del proyecto VADAI compartido en Supabase.
 
-- `webhook_configs` — configuración de cada webhook (slug, token, status, handler)
-- `webhook_executions` — log de cada payload recibido + procesamiento
+Tablas (prefijo `vw_` para namespaciar dentro del proyecto compartido):
+
+- `vw_configs` — configuración de cada webhook (slug, token, status, handler)
+- `vw_executions` — log de cada payload recibido + procesamiento
 
 ## Plan de implementación
 

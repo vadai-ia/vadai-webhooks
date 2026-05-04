@@ -30,7 +30,9 @@ Cuando algo de esto se necesite de verdad, lo discutimos antes de agregar.
 
 ## Modelo de dominio
 
-### `webhook_configs`
+> **Importante:** este servicio comparte el proyecto Supabase de VADAI (`ukgbklhmjbniffssacjm`) con otros sistemas. Por eso las tablas usan prefijo **`vw_`** (vadai-webhooks). Schema completo en [`supabase/schema.sql`](./supabase/schema.sql).
+
+### `vw_configs`
 Cada webhook tiene `slug` (legible) y `token` (secreto, va en la URL).
 Status:
 - `pending_handler` — URL recibe pero aún no hay handler en código
@@ -38,7 +40,7 @@ Status:
 - `paused` — recibe pero descarta sin procesar
 - `archived` — URL responde 410
 
-### `webhook_executions`
+### `vw_executions`
 Cada payload entrante crea una row. Status del processing:
 - `received` (default al insert si va a procesarse)
 - `pending` (sin handler, queda en cola)
@@ -85,7 +87,7 @@ export const handlers = new Map([[miHandler.slug, miHandler]]);
 
 - Archivos: kebab-case
 - Componentes: PascalCase
-- Tablas: snake_case
+- Tablas: snake_case con prefijo `vw_` (proyecto Supabase compartido con otros sistemas VADAI)
 - Path alias: `@/*`
 - Imports: built-in → external → @/lib → @/components → relative
 - Zero `any` implícito
