@@ -85,3 +85,11 @@ export interface OdooMoveTotal {
   id: OdooId;
   amount_total: number;
 }
+
+export interface OdooUserInfo {
+  id: OdooId;
+  name: string;
+  login: string;
+  company_id: [OdooId, string] | false;
+  company_ids: OdooId[];
+}

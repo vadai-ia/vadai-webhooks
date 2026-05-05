@@ -7,6 +7,7 @@ import type {
   OdooTax,
   OdooPartnerLite,
   OdooProductLite,
+  OdooUserInfo,
 } from "@/lib/odoo/types";
 
 export const dynamic = "force-dynamic";
@@ -34,10 +35,25 @@ export default async function OdooDiscoverPage({
   let taxes: OdooTax[] = [];
   let partners: OdooPartnerLite[] = [];
   let fallbackProduct: OdooProductLite | null = null;
+  let userInfo: OdooUserInfo | null = null;
+  let allJournals: OdooJournal[] = [];
+  let allTaxes: OdooTax[] = [];
   let errorMsg: string | null = null;
 
   try {
     const odoo = createOdooClient();
+
+    // Quién soy + qué companies puedo ver. Si Haisushi no está en mis
+    // company_ids, ningún query con allowed_company_ids:[4] va a devolver
+    // nada — sería un problema de permisos del API user, no del setup.
+    const uid = await odoo.authenticate();
+    const users = await odoo.executeKw<OdooUserInfo[]>(
+      "res.users",
+      "read",
+      [[uid]],
+      { fields: ["id", "name", "login", "company_id", "company_ids"] }
+    );
+    userInfo = users[0] ?? null;
 
     companies = await odoo.executeKw<OdooCompany[]>(
       "res.company",
@@ -104,6 +120,28 @@ export default async function OdooDiscoverPage({
         selectedCompanyId
       );
       fallbackProduct = prod[0] ?? null;
+
+      // Debug: TODO lo que el API user puede ver, sin filtrar por company.
+      // Sirve para detectar si los journals "faltantes" en realidad existen
+      // pero pertenecen a otra company.
+      allJournals = await odoo.executeKw<OdooJournal[]>(
+        "account.journal",
+        "search_read",
+        [[]],
+        {
+          fields: ["id", "name", "code", "type", "company_id"],
+          order: "company_id, type, name",
+        }
+      );
+      allTaxes = await odoo.executeKw<OdooTax[]>(
+        "account.tax",
+        "search_read",
+        [[["type_tax_use", "=", "sale"]]],
+        {
+          fields: ["id", "name", "amount", "type_tax_use", "company_id"],
+          order: "company_id, amount desc, name",
+        }
+      );
     }
   } catch (err) {
     errorMsg = err instanceof Error ? err.message : String(err);
@@ -150,6 +188,97 @@ export default async function OdooDiscoverPage({
             .
           </p>
         </div>
+      )}
+
+      {/* ─── Debug: API user info ──────────────────────────────────── */}
+      {userInfo && (
+        <Section title="🔍 Debug — Usuario API autenticado">
+          <p className="text-xs text-vadai-muted mb-3">
+            Si la company que quieres NO está en{" "}
+            <code className="font-mono">company_ids</code>, el API no devuelve
+            sus journals/taxes aunque existan. Hay que agregársela en{" "}
+            <strong>Settings → Users → este user → Allowed Companies</strong>{" "}
+            en Odoo.
+          </p>
+          <Table
+            headers={["UID", "Login", "Nombre", "Default company", "Allowed companies"]}
+            rows={[
+              [
+                <code key="id" className="font-mono text-vadai-text">
+                  {userInfo.id}
+                </code>,
+                <code key="l" className="font-mono text-vadai-text">
+                  {userInfo.login}
+                </code>,
+                userInfo.name,
+                userInfo.company_id ? (
+                  <Badge key="dc" tone="cyan">
+                    {userInfo.company_id[1]} (id={userInfo.company_id[0]})
+                  </Badge>
+                ) : (
+                  "—"
+                ),
+                <span key="ac" className="font-mono text-xs text-vadai-text">
+                  [{userInfo.company_ids.join(", ")}]
+                  {!userInfo.company_ids.includes(selectedCompanyId ?? -1) &&
+                  selectedCompanyId !== null ? (
+                    <span className="ml-2 text-vadai-error">
+                      ⚠️ {selectedCompanyId} NO incluido
+                    </span>
+                  ) : null}
+                </span>,
+              ],
+            ]}
+          />
+        </Section>
+      )}
+
+      {/* ─── Debug: ALL journals & taxes (no company filter) ───────── */}
+      {selectedCompanyId !== null && (allJournals.length > 0 || allTaxes.length > 0) && (
+        <Section title="🔍 Debug — TODOS los journals/taxes que ve el API (sin filtro)">
+          <p className="text-xs text-vadai-muted mb-3">
+            Esto te dice qué existe en realidad, sin importar la company. Si
+            ves un journal con company={" "}
+            <Badge tone="warning">otra (id=1)</Badge> que esperabas que fuera
+            de Haisushi (id=4), es porque se creó en la company equivocada en
+            Odoo.
+          </p>
+          <h3 className="text-xs font-medium text-vadai-text mb-2 uppercase tracking-wide">
+            Journals ({allJournals.length})
+          </h3>
+          <Table
+            headers={["ID", "Tipo", "Código", "Nombre", "Company"]}
+            rows={allJournals.map((j) => [
+              <code key="id" className="font-mono text-vadai-text">
+                {j.id}
+              </code>,
+              <Badge key="t" tone={journalToneFor(j.type)}>
+                {j.type}
+              </Badge>,
+              <code key="c" className="font-mono text-vadai-muted">
+                {j.code}
+              </code>,
+              j.name,
+              ownerCell(j.company_id, selectedCompanyId),
+            ])}
+          />
+          <h3 className="text-xs font-medium text-vadai-text mt-6 mb-2 uppercase tracking-wide">
+            Sale taxes ({allTaxes.length})
+          </h3>
+          <Table
+            headers={["ID", "Amount", "Nombre", "Company"]}
+            rows={allTaxes.map((t) => [
+              <code key="id" className="font-mono text-vadai-text">
+                {t.id}
+              </code>,
+              <span key="a" className="font-mono text-vadai-text">
+                {t.amount}%
+              </span>,
+              t.name,
+              ownerCell(t.company_id, selectedCompanyId),
+            ])}
+          />
+        </Section>
       )}
 
       {/* ─── Companies ─────────────────────────────────────────────── */}
