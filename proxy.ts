@@ -24,6 +24,20 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(httpsUrl, 308);
   }
 
+  // ─── HSTS ────────────────────────────────────────────────────────────────
+  // Le decimos al browser que esta hostname es HTTPS-only por 1 año. Tras
+  // el primer hit en https, cualquier futura request que el usuario teclee
+  // como http (o links viejos cacheados, bookmarks) la upgrade-a el browser
+  // automáticamente sin pegarle al server. Sólo lo seteamos sobre HTTPS —
+  // browsers ignoran el header si llega por http (es regla de seguridad).
+  const isHttps = forwardedProto === "https";
+  const addHsts = (res: NextResponse): NextResponse => {
+    if (isHttps) {
+      res.headers.set("Strict-Transport-Security", "max-age=31536000");
+    }
+    return res;
+  };
+
   // Response que iremos mutando con las cookies que escriba @supabase/ssr.
   let response = NextResponse.next({ request });
 
@@ -61,10 +75,10 @@ export async function proxy(request: NextRequest) {
 
   if (!user && !isPublic) {
     const loginUrl = new URL("/login", request.url);
-    return NextResponse.redirect(loginUrl);
+    return addHsts(NextResponse.redirect(loginUrl));
   }
 
-  return response;
+  return addHsts(response);
 }
 
 export const config = {
