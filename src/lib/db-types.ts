@@ -1182,6 +1182,78 @@ export type Database = {
           },
         ]
       }
+      vw_genco_company_mapping: {
+        Row: {
+          bank_journal_id: number
+          card_journal_id: number
+          cash_journal_id: number
+          company_id: number
+          created_at: string | null
+          fallback_product_id: number
+          id_empresa: string
+          is_active: boolean | null
+          notes: string | null
+          partner_id: number
+          sale_journal_id: number
+          tax_iva_0_id: number
+          tax_iva_16_id: number
+          updated_at: string | null
+          vales_journal_id: number | null
+        }
+        Insert: {
+          bank_journal_id: number
+          card_journal_id: number
+          cash_journal_id: number
+          company_id: number
+          created_at?: string | null
+          fallback_product_id: number
+          id_empresa: string
+          is_active?: boolean | null
+          notes?: string | null
+          partner_id: number
+          sale_journal_id: number
+          tax_iva_0_id: number
+          tax_iva_16_id: number
+          updated_at?: string | null
+          vales_journal_id?: number | null
+        }
+        Update: {
+          bank_journal_id?: number
+          card_journal_id?: number
+          cash_journal_id?: number
+          company_id?: number
+          created_at?: string | null
+          fallback_product_id?: number
+          id_empresa?: string
+          is_active?: boolean | null
+          notes?: string | null
+          partner_id?: number
+          sale_journal_id?: number
+          tax_iva_0_id?: number
+          tax_iva_16_id?: number
+          updated_at?: string | null
+          vales_journal_id?: number | null
+        }
+        Relationships: []
+      }
+      vw_genco_payment_method_map: {
+        Row: {
+          forma_pago: string
+          journal_field: string
+          notes: string | null
+        }
+        Insert: {
+          forma_pago: string
+          journal_field: string
+          notes?: string | null
+        }
+        Update: {
+          forma_pago?: string
+          journal_field?: string
+          notes?: string | null
+        }
+        Relationships: []
+      }
       webhooks: {
         Row: {
           created_at: string | null

@@ -124,3 +124,17 @@ CREATE POLICY "allowed_users_read" ON vw_executions
 
 -- El endpoint /in/[token] usa service_role_key que bypassa RLS
 -- para insertar/actualizar `vw_executions` sin sesión de usuario.
+
+
+-- ============================================================
+-- 5. TABLAS POR HANDLER — auxiliares
+-- ============================================================
+-- Cada handler que necesite tablas de mapeo / config las crea con prefijo
+-- `vw_<slug>_*` para mantener namespace limpio dentro del proyecto Supabase
+-- compartido. Las migraciones viven en supabase/migrations/.
+--
+-- Inventario actual:
+--   - vw_genco_company_mapping       (handler genco-soft-odoo)
+--   - vw_genco_payment_method_map    (handler genco-soft-odoo)
+--
+-- Schema completo en cada migración (ver migrations/0002_genco_mapping_tables.sql).
