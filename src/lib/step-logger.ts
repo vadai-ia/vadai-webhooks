@@ -17,14 +17,14 @@ export function createStepLogger(
     async step(
       name: string,
       status: StepStatus,
-      message?: string,
+      message?: string | null,
       data?: unknown
     ): Promise<void> {
       const newStep: Step = {
         ts: new Date().toISOString(),
         name,
         status,
-        message,
+        message: message ?? undefined,
         data,
       };
 

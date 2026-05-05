@@ -1,4 +1,5 @@
 import type { WebhookHandler } from "./_types";
+import { handler as gencoSoftOdoo } from "./genco-soft-odoo";
 
 /**
  * Registro central de handlers.
@@ -10,4 +11,6 @@ import type { WebhookHandler } from "./_types";
  *
  * El runner lo busca por `config.handler_slug` (default: igual al slug del webhook).
  */
-export const handlers = new Map<string, WebhookHandler<unknown>>();
+export const handlers = new Map<string, WebhookHandler<unknown>>([
+  [gencoSoftOdoo.slug, gencoSoftOdoo as WebhookHandler<unknown>],
+]);
