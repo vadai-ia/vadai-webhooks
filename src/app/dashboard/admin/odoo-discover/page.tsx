@@ -50,11 +50,25 @@ export default async function OdooDiscoverPage({
       // Secuencial a propósito: Odoo SaaS rate-limita ráfagas paralelas
       // con HTTP 429. Vamos en serie y dejamos que el cliente haga retry
       // si pega rate limit en alguna llamada.
+      //
+      // Filter por company_id = N OR company_id = false. En Odoo, los
+      // journals/taxes "compartidos" tienen company_id = false y son
+      // utilizables por todas las companies — para nuestro mapping nos
+      // sirven igual que los company-specific.
       journals = await odoo.executeKw<OdooJournal[]>(
         "account.journal",
         "search_read",
-        [[["company_id", "=", selectedCompanyId]]],
-        { fields: ["id", "name", "code", "type"], order: "type, name" },
+        [
+          [
+            "|",
+            ["company_id", "=", selectedCompanyId],
+            ["company_id", "=", false],
+          ],
+        ],
+        {
+          fields: ["id", "name", "code", "type", "company_id"],
+          order: "type, name",
+        },
         selectedCompanyId
       );
       taxes = await odoo.executeKw<OdooTax[]>(
@@ -62,12 +76,15 @@ export default async function OdooDiscoverPage({
         "search_read",
         [
           [
-            ["company_id", "=", selectedCompanyId],
+            "&",
             ["type_tax_use", "=", "sale"],
+            "|",
+            ["company_id", "=", selectedCompanyId],
+            ["company_id", "=", false],
           ],
         ],
         {
-          fields: ["id", "name", "amount", "type_tax_use"],
+          fields: ["id", "name", "amount", "type_tax_use", "company_id"],
           order: "amount desc, name",
         },
         selectedCompanyId
@@ -164,12 +181,23 @@ export default async function OdooDiscoverPage({
       {/* ─── Detalles por company ──────────────────────────────────── */}
       {selectedCompanyId !== null && !errorMsg && (
         <>
-          <Section title={`Journals — company ${selectedCompanyId}`}>
+          <Section
+            title={`Journals utilizables desde company ${selectedCompanyId}`}
+          >
+            <p className="text-xs text-vadai-muted mb-3">
+              Incluye journals propios de la company + journals compartidos
+              (<code>company_id = false</code>). La columna <code>Company</code>{" "}
+              te dice cuáles son cuáles.
+            </p>
             {journals.length === 0 ? (
-              <Empty>Esta company no tiene journals.</Empty>
+              <Empty>
+                No hay journals utilizables — ni propios ni compartidos.
+                Verifica que el chart of accounts esté instalado para esta
+                company.
+              </Empty>
             ) : (
               <Table
-                headers={["ID", "Tipo", "Código", "Nombre"]}
+                headers={["ID", "Tipo", "Código", "Nombre", "Company"]}
                 rows={journals.map((j) => [
                   <code key="id" className="font-mono text-vadai-text">
                     {j.id}
@@ -181,17 +209,26 @@ export default async function OdooDiscoverPage({
                     {j.code}
                   </code>,
                   j.name,
+                  ownerCell(j.company_id, selectedCompanyId),
                 ])}
               />
             )}
           </Section>
 
-          <Section title={`Taxes (sale) — company ${selectedCompanyId}`}>
+          <Section
+            title={`Taxes (sale) utilizables desde company ${selectedCompanyId}`}
+          >
+            <p className="text-xs text-vadai-muted mb-3">
+              Incluye taxes propios + compartidos. Misma lógica que los
+              journals.
+            </p>
             {taxes.length === 0 ? (
-              <Empty>Esta company no tiene taxes de venta.</Empty>
+              <Empty>
+                No hay taxes de venta utilizables — ni propios ni compartidos.
+              </Empty>
             ) : (
               <Table
-                headers={["ID", "Amount", "Nombre"]}
+                headers={["ID", "Amount", "Nombre", "Company"]}
                 rows={taxes.map((t) => [
                   <code key="id" className="font-mono text-vadai-text">
                     {t.id}
@@ -200,6 +237,7 @@ export default async function OdooDiscoverPage({
                     {t.amount}%
                   </span>,
                   t.name,
+                  ownerCell(t.company_id, selectedCompanyId),
                 ])}
               />
             )}
@@ -365,4 +403,24 @@ function journalToneFor(
     default:
       return "muted";
   }
+}
+
+/**
+ * Renderiza el "owner" de un journal o tax: pintamos diferente si es propio
+ * de la company seleccionada vs compartido vs de otra company.
+ */
+function ownerCell(
+  companyField: [number, string] | false,
+  selectedCompanyId: number
+): React.ReactNode {
+  if (companyField === false) {
+    return (
+      <Badge tone="muted">compartido</Badge>
+    );
+  }
+  const [ownerId, ownerName] = companyField;
+  if (ownerId === selectedCompanyId) {
+    return <Badge tone="success">{ownerName}</Badge>;
+  }
+  return <Badge tone="warning">{ownerName} (id={ownerId})</Badge>;
 }

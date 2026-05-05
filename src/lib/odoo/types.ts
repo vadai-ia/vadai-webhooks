@@ -57,6 +57,8 @@ export interface OdooJournal {
   name: string;
   code: string;
   type: string; // 'sale' | 'purchase' | 'cash' | 'bank' | 'general'
+  /** [id, name] cuando es company-specific, false cuando es compartido. */
+  company_id: [OdooId, string] | false;
 }
 
 export interface OdooTax {
@@ -64,6 +66,8 @@ export interface OdooTax {
   name: string;
   amount: number;
   type_tax_use: string; // 'sale' | 'purchase' | 'none'
+  /** [id, name] cuando es company-specific, false cuando es compartido. */
+  company_id: [OdooId, string] | false;
 }
 
 export interface OdooPartnerLite {
