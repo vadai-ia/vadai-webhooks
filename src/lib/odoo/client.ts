@@ -15,9 +15,11 @@ import type { OdooJsonRpcResponse } from "./types";
  * - URL: aceptamos cualquier path después del host (ej. `/odoo`, `/web`)
  *   y normalizamos al `/jsonrpc` desde la raíz, que es el endpoint
  *   real para JSON-RPC en todas las versiones de Odoo.
- * - Retry: 3 intentos en errores de red o HTTP 5xx (1s, 4s, 16s).
- *   Errores 4xx y errores aplicativos de Odoo NO se reintentan — son
- *   problemas de payload o credenciales, no transitorios.
+ * - Retry:
+ *     · 5xx y errores de red → 3 intentos con 1s/4s/16s
+ *     · 429 (rate limit, común en Odoo SaaS) → 3 intentos con 5s/15s/45s,
+ *       o usando el `Retry-After` del response si viene
+ *     · Otros 4xx y errores aplicativos de Odoo → no retry
  */
 export interface OdooClient {
   authenticate(): Promise<number>;
@@ -39,6 +41,7 @@ interface OdooConfig {
 }
 
 const RETRY_DELAYS_MS = [1000, 4000, 16000];
+const RATE_LIMIT_DELAYS_MS = [5000, 15000, 45000];
 
 class OdooClientImpl implements OdooClient {
   private uid: number | null = null;
@@ -124,7 +127,20 @@ class OdooClientImpl implements OdooClient {
           body,
         });
 
-        // 4xx: problema de cliente, no reintentar.
+        // 429: rate limit. Odoo SaaS lo aplica de forma agresiva.
+        // Backoff largo (segundos), respetando Retry-After si viene.
+        if (res.status === 429) {
+          const retryAfter = parseRetryAfter(res.headers.get("Retry-After"));
+          lastError = new Error("Odoo HTTP 429 (rate limited)");
+          if (attempt < 2) {
+            const wait = retryAfter ?? RATE_LIMIT_DELAYS_MS[attempt];
+            await new Promise((r) => setTimeout(r, wait));
+            continue;
+          }
+          throw lastError;
+        }
+
+        // Otros 4xx: problema de cliente, no reintentar.
         if (res.status >= 400 && res.status < 500) {
           const text = await safeText(res);
           throw new Error(`Odoo HTTP ${res.status}: ${text}`);
@@ -184,6 +200,18 @@ async function safeText(res: Response): Promise<string> {
   } catch {
     return "<no body>";
   }
+}
+
+/**
+ * Retry-After viene en segundos (numérico) o como fecha HTTP. Sólo
+ * manejamos el caso numérico — es lo que Odoo manda cuando lo manda.
+ * Tope a 60s para que un valor enorme no congele al usuario.
+ */
+function parseRetryAfter(header: string | null): number | null {
+  if (!header) return null;
+  const seconds = Number(header);
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+  return Math.min(seconds, 60) * 1000;
 }
 
 export function createOdooClient(): OdooClient {

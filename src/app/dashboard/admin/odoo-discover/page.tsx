@@ -47,44 +47,45 @@ export default async function OdooDiscoverPage({
     );
 
     if (selectedCompanyId !== null) {
-      const [j, t, p, prod] = await Promise.all([
-        odoo.executeKw<OdooJournal[]>(
-          "account.journal",
-          "search_read",
-          [[["company_id", "=", selectedCompanyId]]],
-          { fields: ["id", "name", "code", "type"], order: "type, name" },
-          selectedCompanyId
-        ),
-        odoo.executeKw<OdooTax[]>(
-          "account.tax",
-          "search_read",
+      // Secuencial a propósito: Odoo SaaS rate-limita ráfagas paralelas
+      // con HTTP 429. Vamos en serie y dejamos que el cliente haga retry
+      // si pega rate limit en alguna llamada.
+      journals = await odoo.executeKw<OdooJournal[]>(
+        "account.journal",
+        "search_read",
+        [[["company_id", "=", selectedCompanyId]]],
+        { fields: ["id", "name", "code", "type"], order: "type, name" },
+        selectedCompanyId
+      );
+      taxes = await odoo.executeKw<OdooTax[]>(
+        "account.tax",
+        "search_read",
+        [
           [
-            [
-              ["company_id", "=", selectedCompanyId],
-              ["type_tax_use", "=", "sale"],
-            ],
+            ["company_id", "=", selectedCompanyId],
+            ["type_tax_use", "=", "sale"],
           ],
-          { fields: ["id", "name", "amount", "type_tax_use"], order: "amount desc, name" },
-          selectedCompanyId
-        ),
-        odoo.executeKw<OdooPartnerLite[]>(
-          "res.partner",
-          "search_read",
-          [[["name", "ilike", "publico"]]],
-          { fields: ["id", "name"], limit: 10 },
-          selectedCompanyId
-        ),
-        odoo.executeKw<OdooProductLite[]>(
-          "product.product",
-          "search_read",
-          [[["id", "=", 1085]]],
-          { fields: ["id", "name", "default_code"] },
-          selectedCompanyId
-        ),
-      ]);
-      journals = j;
-      taxes = t;
-      partners = p;
+        ],
+        {
+          fields: ["id", "name", "amount", "type_tax_use"],
+          order: "amount desc, name",
+        },
+        selectedCompanyId
+      );
+      partners = await odoo.executeKw<OdooPartnerLite[]>(
+        "res.partner",
+        "search_read",
+        [[["name", "ilike", "publico"]]],
+        { fields: ["id", "name"], limit: 10 },
+        selectedCompanyId
+      );
+      const prod = await odoo.executeKw<OdooProductLite[]>(
+        "product.product",
+        "search_read",
+        [[["id", "=", 1085]]],
+        { fields: ["id", "name", "default_code"] },
+        selectedCompanyId
+      );
       fallbackProduct = prod[0] ?? null;
     }
   } catch (err) {
