@@ -28,7 +28,7 @@ const ConceptoSchema = z.object({
 });
 
 const PagoSchema = z.object({
-  FormaPago: z.string(),
+  FormaPago: z.string().nullable().transform((v) => v ?? ""),
   Importe: z.number(),
   Propina: z.number().default(0),
 });
