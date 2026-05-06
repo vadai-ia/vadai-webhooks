@@ -39,7 +39,7 @@ const VentaSchema = z.object({
   FechaVenta: z.string(),
   NumeroOrden: z.string(),
   IdCliente: z.string().optional().default(""),
-  IdUsuario: z.string(),
+  IdUsuario: z.string().nullable().default(null),
   Total: z.number(),
   Area: z.string().optional().default(""),
   Conceptos: z.array(ConceptoSchema).min(1),
@@ -451,7 +451,7 @@ async function processVenta(
           ref,
           narration:
             `Ticket ${venta.NumeroOrden} | ${venta.Estacion} | ` +
-            `${venta.Area || "—"} | Operador: ${venta.IdUsuario}`,
+            `${venta.Area || "—"} | Operador: ${venta.IdUsuario ?? "—"}`,
           l10n_mx_edi_cfdi_to_public: true,
           l10n_mx_edi_usage: "G03",
           invoice_line_ids: lines,
