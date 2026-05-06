@@ -21,6 +21,7 @@ function formatRelative(iso: string | null): string {
     year: "numeric",
     month: "short",
     day: "numeric",
+    timeZone: "America/Mexico_City",
   });
 }
 
