@@ -51,10 +51,11 @@ export async function runHandler(
   if (!exec) return;
 
   const logger = createStepLogger(sb, execId);
+  let idempKey: string | null = null;
 
   try {
     // Idempotencia
-    const idempKey = handler.getIdempotencyKey?.(exec.payload) ?? null;
+    idempKey = handler.getIdempotencyKey?.(exec.payload) ?? null;
 
     if (idempKey) {
       const { data: dup } = await sb
@@ -133,6 +134,7 @@ export async function runHandler(
         status: "failed",
         error_message: error.message,
         error_stack: error.stack ?? null,
+        idempotency_key: idempKey,
         completed_at: new Date().toISOString(),
         duration_ms: Date.now() - start,
       })

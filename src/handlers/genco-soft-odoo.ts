@@ -108,21 +108,19 @@ function buildRef(idEmpresa: string, v: Venta): string {
  * residual. Forzamos 100% en ese caso para que el line total sea 0.
  */
 function computeDiscountPct(c: Concepto): number {
-  const subtotalGross = c.PrecioUnitario * c.Cantidad;
-  if (subtotalGross === 0) return 0;
+  if (c.ImporteSinImpuestos === 0) return 0;
   if (c.Descuento === 0) return 0;
 
-  // Cortesía: descuento iguala al neto sin IVA.
-  if (
-    c.ImporteSinImpuestos > 0 &&
-    Math.abs(c.Descuento - c.ImporteSinImpuestos) < 0.01
-  ) {
+  // Cortesía: descuento iguala al neto sin IVA → 100% para que line total = 0.
+  if (Math.abs(c.Descuento - c.ImporteSinImpuestos) < 0.01) {
     return 100;
   }
 
-  // Descuento parcial: porcentaje sobre el gross.
-  const pct = (c.Descuento / subtotalGross) * 100;
-  // Redondeamos a 2 decimales; clamp a 100.
+  // Descuento parcial: el POS manda Descuento sobre el subtotal SIN IVA, así
+  // que el denominador correcto es ImporteSinImpuestos. El factor (1+tasa) se
+  // cancela contra el price_include=True del tax en Odoo, así que no hace
+  // falta tocar price_unit.
+  const pct = (c.Descuento / c.ImporteSinImpuestos) * 100;
   return Math.min(Math.round(pct * 100) / 100, 100);
 }
 
