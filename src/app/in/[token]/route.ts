@@ -9,14 +9,21 @@ export const dynamic = "force-dynamic";
  * Endpoint universal de ingestión.
  *
  *   POST /in/[token]
+ *   POST /in/[token]?sync=1
  *
  * - 404 si el token no existe
  * - 410 si el webhook está archivado
  * - 400 si el body no es JSON válido
- * - 200 + { ok, execution_id, status } en cualquier otro caso
+ * - 200 + { ok, execution_id, status } en async (default)
+ * - 200 + { ok, execution_id, status, result, error? } en sync
  *
- * Si el config está active, dispara `runHandler` en background con `after()`
- * para responder inmediato al cliente externo y procesar después.
+ * Modos:
+ *   - Async (default): si está active, dispara `runHandler` en background
+ *     con `after()` y responde el ack al toque. Pensado para integraciones
+ *     fire-and-forget tipo POS donde quien dispara no necesita la salida.
+ *   - Sync (`?sync=1`): espera al handler y devuelve el `result_summary`
+ *     en el response. Pensado para flujos N8N/Make donde los pasos
+ *     siguientes consumen la salida del handler.
  */
 export async function POST(
   req: NextRequest,
@@ -88,8 +95,41 @@ export async function POST(
     return NextResponse.json({ error: "Internal" }, { status: 500 });
   }
 
-  // 6. Si está active, procesar en background — respondemos ya
+  // 6. ¿Sync o async?
+  // `?sync=1` (o sync=true) hace que esperemos al handler y devolvamos
+  // el result_summary. Si el config no está active no hay nada que esperar.
+  const syncParam = req.nextUrl.searchParams.get("sync");
+  const wantsSync = syncParam === "1" || syncParam === "true";
+
   if (config.status === "active") {
+    if (wantsSync) {
+      try {
+        await runHandler(exec.id, config);
+      } catch (e) {
+        console.error("[runHandler] uncaught (sync)", e);
+      }
+
+      // Releemos la row: runHandler ya persistió status/result_summary/error.
+      const { data: finalRow } = await sb
+        .from("vw_executions")
+        .select("status, result_summary, error_message")
+        .eq("id", exec.id)
+        .single();
+
+      return NextResponse.json(
+        {
+          ok: finalRow?.status === "completed" ||
+              finalRow?.status === "completed_with_warning" ||
+              finalRow?.status === "skipped_duplicate",
+          execution_id: exec.id,
+          status: finalRow?.status ?? "unknown",
+          result: finalRow?.result_summary ?? null,
+          error: finalRow?.error_message ?? null,
+        },
+        { status: 200 }
+      );
+    }
+
     after(async () => {
       try {
         await runHandler(exec.id, config);
