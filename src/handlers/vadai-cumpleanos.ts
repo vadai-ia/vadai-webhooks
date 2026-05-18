@@ -126,6 +126,27 @@ function ageTurning(birthdayIso: string, targetYear: number): number {
   return targetYear - Number(birthdayIso.slice(0, 4));
 }
 
+/**
+ * Parsea la fecha base del payload con awareness de TZ MX.
+ *
+ * Si viene un `YYYY-MM-DD` pelado, JS lo parsearía como UTC medianoche
+ * y al proyectar a Mexico_City (UTC-6 año redondo desde 2023) cae al
+ * día anterior 18:00 — bug silencioso de off-by-one en `hoy`.
+ *
+ * Lo tratamos como mediodía MX para que cualquier proyección de TZ
+ * caiga limpio dentro del mismo día calendario.
+ *
+ * Cualquier otro formato (ISO completo con `T` y offset) pasa tal cual
+ * a `new Date` — quien lo manda ya tomó la decisión de instante.
+ */
+function parseBaseDate(input: string | undefined): Date {
+  if (!input) return new Date();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(input)) {
+    return new Date(`${input}T12:00:00-06:00`);
+  }
+  return new Date(input);
+}
+
 
 // =============================================================
 // Construcción de entries
@@ -229,8 +250,10 @@ export const handler: WebhookHandler<Payload> = {
   getIdempotencyKey: () => null,
 
   async process(payload, ctx): Promise<HandlerResult> {
-    // Fecha base: payload.date si vino, si no `now`.
-    const baseDate = payload.date ? new Date(payload.date) : new Date();
+    // Fecha base: payload.date si vino, si no `now`. parseBaseDate trata
+    // las fechas YYYY-MM-DD como mediodía MX para evitar el off-by-one
+    // por la diferencia con UTC.
+    const baseDate = parseBaseDate(payload.date);
     if (Number.isNaN(baseDate.getTime())) {
       throw new Error(`payload.date inválido: '${payload.date}'`);
     }
