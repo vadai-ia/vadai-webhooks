@@ -33,7 +33,7 @@ export interface OdooClient {
   ): Promise<T>;
 }
 
-interface OdooConfig {
+export interface OdooConfig {
   url: string;
   db: string;
   user: string;
@@ -214,6 +214,11 @@ function parseRetryAfter(header: string | null): number | null {
   return Math.min(seconds, 60) * 1000;
 }
 
+/**
+ * Factory por env vars `ODOO_URL/DB/USER/API_KEY`. Usado por genco-soft-odoo.
+ * Otros handlers que hablan con un tenant distinto deben construirse el
+ * config a mano y pasar por `createOdooClientFromConfig`.
+ */
 export function createOdooClient(): OdooClient {
   const url = process.env.ODOO_URL;
   const db = process.env.ODOO_DB;
@@ -225,4 +230,13 @@ export function createOdooClient(): OdooClient {
     );
   }
   return new OdooClientImpl({ url, db, user, apiKey });
+}
+
+/**
+ * Construye un cliente con un config explícito. Lo expone la lib para que
+ * cada handler decida de dónde lee sus credenciales (sus propias env vars,
+ * un row en DB, lo que sea) sin acoplarse al `ODOO_*` global.
+ */
+export function createOdooClientFromConfig(config: OdooConfig): OdooClient {
+  return new OdooClientImpl(config);
 }

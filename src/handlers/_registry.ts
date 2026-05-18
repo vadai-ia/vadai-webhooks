@@ -1,5 +1,6 @@
 import type { WebhookHandler } from "./_types";
 import { handler as gencoSoftOdoo } from "./genco-soft-odoo";
+import { handler as vadaiCumpleanos } from "./vadai-cumpleanos";
 
 /**
  * Registro central de handlers.
@@ -13,4 +14,5 @@ import { handler as gencoSoftOdoo } from "./genco-soft-odoo";
  */
 export const handlers = new Map<string, WebhookHandler<unknown>>([
   [gencoSoftOdoo.slug, gencoSoftOdoo as WebhookHandler<unknown>],
+  [vadaiCumpleanos.slug, vadaiCumpleanos as WebhookHandler<unknown>],
 ]);
