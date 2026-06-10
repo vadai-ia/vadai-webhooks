@@ -302,6 +302,44 @@ async function tasksWithTag(
   return found.map((t) => t.id);
 }
 
+/**
+ * Etapa (columna kanban) destino para una task de un proyecto.
+ *
+ * Al crear por API sin `stage_id`, Odoo deja la task en "Ninguno". Para que
+ * caiga en una etapa real:
+ *   1. Usa la PRIMERA etapa del proyecto (por `sequence`) — respeta el kanban
+ *      que ya tengas (ej. "Por hacer", "Pendientes").
+ *   2. Si el proyecto no tiene etapas, crea una con nombre `FIREFLIES_TASK_STAGE`
+ *      (default "Por hacer") ligada al proyecto.
+ * Cachea por proyecto dentro de la ejecución.
+ */
+async function resolveStageId(
+  odoo: OdooClient,
+  projectId: number,
+  cache: Map<number, number | null>
+): Promise<number | null> {
+  if (cache.has(projectId)) return cache.get(projectId) ?? null;
+
+  const found = await odoo.executeKw<Array<{ id: number }>>(
+    "project.task.type",
+    "search_read",
+    [[["project_ids", "in", [projectId]]]],
+    { fields: ["id"], order: "sequence asc, id asc", limit: 1 }
+  );
+
+  let stageId: number | null = found.length > 0 ? found[0].id : null;
+
+  if (stageId == null) {
+    const name = process.env.FIREFLIES_TASK_STAGE || "Por hacer";
+    stageId = await odoo.executeKw<number>("project.task.type", "create", [
+      { name, project_ids: [[6, 0, [projectId]]] },
+    ]);
+  }
+
+  cache.set(projectId, stageId);
+  return stageId;
+}
+
 async function searchUserIdByEmail(
   odoo: OdooClient,
   email: string
@@ -572,6 +610,7 @@ export const handler: WebhookHandler<Payload> = {
 
     const fallbackUserId = await resolveFallbackUserId(odoo);
     const userCache = new Map<string, number | null>();
+    const stageCache = new Map<number, number | null>();
 
     // 6. Crear una task por action item.
     const created: CreatedTask[] = [];
@@ -636,7 +675,12 @@ export const handler: WebhookHandler<Payload> = {
             aiDegraded,
           }),
         };
-        if (projectId !== false) vals.project_id = projectId;
+        if (projectId !== false) {
+          vals.project_id = projectId;
+          // Etapa real (evita que caiga en "Ninguno").
+          const stageId = await resolveStageId(odoo, projectId, stageCache);
+          if (stageId != null) vals.stage_id = stageId;
+        }
 
         const taskId = await odoo.executeKw<number>("project.task", "create", [
           vals,

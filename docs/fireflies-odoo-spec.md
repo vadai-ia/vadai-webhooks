@@ -72,9 +72,12 @@ proyecto.
 
 ## Odoo — modelo y campos
 
-`project.task` (columna/etapa por defecto del proyecto, no se fuerza `stage_id`):
+`project.task`:
 - `name`: el `title` de la IA (fallback al texto original).
 - `project_id`: proyecto LEVANTIA elegido | Inbox | omitido (tarea privada).
+- `stage_id`: primera etapa del proyecto por `sequence` (respeta tu kanban); si el
+  proyecto no tiene etapas, se crea una con `FIREFLIES_TASK_STAGE` (default "Por hacer").
+  Sin esto, Odoo deja las tasks creadas por API en la columna "Ninguno".
 - `user_ids`: `[[6,0,[userId]]]` (responsable resuelto o fallback Alex).
 - `tag_ids`: `[[6,0,[tagId]]]` con `FF:<meetingId>`.
 - `date_deadline`: `YYYY-MM-DD` = fecha de reunión + offset (clamp 0–90 días).
