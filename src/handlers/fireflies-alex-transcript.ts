@@ -147,6 +147,21 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;");
 }
 
+/**
+ * Nombre del tag visible = título de la reunión (limpio y truncado). Es solo
+ * para agrupar/filtrar; la idempotencia NO depende de él. Si no hay título,
+ * cae a "Fireflies <fecha o id>".
+ */
+function buildMeetingTag(
+  title: string | null,
+  dateStr: string | null,
+  meetingId: string
+): string {
+  const clean = (title ?? "").replace(/\s+/g, " ").trim();
+  if (clean) return clean.slice(0, 80);
+  return `Fireflies ${dateStr ?? meetingId}`.slice(0, 80);
+}
+
 interface DescriptionParts {
   item: ParsedActionItem;
   t: FirefliesTranscript;
@@ -221,6 +236,11 @@ function buildTaskDescription(d: DescriptionParts): string {
       `<p><a href="${escapeHtml(d.t.meeting_link)}">Link de la reunión</a></p>`
     );
   }
+  // Pie discreto: el meetingId vive acá (no en un tag) y sirve de ancla de
+  // idempotencia (dedup por `description ilike <meetingId>`).
+  parts.push(
+    `<p><small>Origen: Fireflies · ID ${escapeHtml(d.t.id)}</small></p>`
+  );
   return parts.join("");
 }
 
@@ -288,15 +308,19 @@ async function findOrCreateTag(
   return odoo.executeKw<number>("project.tags", "create", [{ name }]);
 }
 
-/** Tasks que ya llevan el tag de este meeting (en cualquier proyecto). */
-async function tasksWithTag(
+/**
+ * Tasks ya creadas para este meeting (ancla de idempotencia). El meetingId
+ * (un ULID único) vive en la descripción de cada task, así que dedupeamos por
+ * `description ilike <meetingId>` — sin depender de un tag visible.
+ */
+async function tasksForMeeting(
   odoo: OdooClient,
-  tagId: number
+  meetingId: string
 ): Promise<number[]> {
   const found = await odoo.executeKw<Array<{ id: number }>>(
     "project.task",
     "search_read",
-    [[["tag_ids", "in", [tagId]]]],
+    [[["description", "ilike", meetingId]]],
     { fields: ["id"] }
   );
   return found.map((t) => t.id);
@@ -487,12 +511,10 @@ export const handler: WebhookHandler<Payload> = {
       { count: items.length }
     );
 
-    // 3. Odoo: tag de idempotencia + chequeo de duplicados.
+    // 3. Odoo: chequeo de duplicados por meetingId (no por tag).
     const odoo = createVadaiOdooClient();
-    const tagName = `FF:${payload.meetingId}`;
-    const tagId = await findOrCreateTag(odoo, tagName);
 
-    const existing = await tasksWithTag(odoo, tagId);
+    const existing = await tasksForMeeting(odoo, payload.meetingId);
     if (existing.length > 0) {
       await ctx.logger.step(
         "odoo_dup_check",
@@ -509,6 +531,10 @@ export const handler: WebhookHandler<Payload> = {
         warning: true,
       };
     }
+
+    // Tag visible = nombre de la reunión (legible, agrupa las tareas del
+    // meeting). El meetingId NO va en el tag: vive en la descripción.
+    const tagName = buildMeetingTag(t.title, dateStr, payload.meetingId);
 
     // Sin action items: cerramos en completed con 0 tareas.
     const baseSummary: Record<string, unknown> = {
@@ -539,7 +565,8 @@ export const handler: WebhookHandler<Payload> = {
       };
     }
 
-    // 4. Contexto Odoo: proyectos LEVANTIA candidatos + Inbox.
+    // 4. Contexto Odoo: tag de la reunión + proyectos LEVANTIA + Inbox.
+    const tagId = await findOrCreateTag(odoo, tagName);
     const candidates = await fetchLevantiaProjects(odoo);
     const candidateById = new Map(candidates.map((c) => [c.id, c.name]));
     const inboxId = await resolveInboxProjectId(odoo);

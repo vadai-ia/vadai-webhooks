@@ -79,7 +79,7 @@ proyecto.
   proyecto no tiene etapas, se crea una con `FIREFLIES_TASK_STAGE` (default "Por hacer").
   Sin esto, Odoo deja las tasks creadas por API en la columna "Ninguno".
 - `user_ids`: `[[6,0,[userId]]]` (responsable resuelto o fallback Alex).
-- `tag_ids`: `[[6,0,[tagId]]]` con `FF:<meetingId>`.
+- `tag_ids`: `[[6,0,[tagId]]]` con el **nombre de la reunión** (legible, para filtrar).
 - `date_deadline`: `YYYY-MM-DD` = fecha de reunión + offset (clamp 0–90 días).
 - `description`: reunión + fecha + responsable + entrega + clasificación IA + texto original + links.
 
@@ -95,9 +95,10 @@ Proyectos candidatos: `project.project` con `['name','ilike', FIREFLIES_LEVANTIA
 ## Idempotencia
 
 - **Runner**: `getIdempotencyKey = meetingId` → reintentos de Fireflies = `skipped_duplicate`.
-- **Odoo**: cada task lleva tag `FF:<meetingId>`. Antes de crear, busco tasks con ese tag
-  (en cualquier proyecto); si existen, no recreo. El tag también deja filtrar todo lo de una
-  reunión.
+- **Odoo**: el `meetingId` (ULID único) vive en la descripción de cada task (pie + link al
+  transcript). Antes de crear, dedup por `description ilike <meetingId>`; si ya hay tasks, no
+  recreo. El **tag visible es el nombre de la reunión** (solo para agrupar/filtrar, no para
+  idempotencia).
 
 ## Status final / resiliencia
 
