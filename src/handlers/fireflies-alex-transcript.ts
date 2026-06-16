@@ -39,6 +39,21 @@ const PayloadSchema = z
 
 type Payload = z.infer<typeof PayloadSchema>;
 
+/**
+ * ¿Este evento dispara el procesamiento? Solo los que traen el summary listo:
+ * "meeting.summarized" (Fireflies 2.0), "Transcription completed" (doc/legacy)
+ * y un payload sin `event` (tests con curl). "meeting.transcribed" NO procesa
+ * (el summary aún no existe).
+ */
+function isProcessableEvent(event: string | null | undefined): boolean {
+  const ev = (event ?? "").toLowerCase().trim();
+  return (
+    ev === "" ||
+    ev.includes("summar") ||
+    ev.includes("transcription completed")
+  );
+}
+
 const TZ = "America/Mexico_City";
 
 // Confianza mínima para aceptar el proyecto que eligió la IA. Por debajo de
@@ -477,8 +492,16 @@ export const handler: WebhookHandler<Payload> = {
     "propone una fecha de entrega. Lo no clasificable va a Inbox.",
   schema: PayloadSchema,
 
-  // Reintentos de Fireflies sobre el mismo meeting → skipped_duplicate.
-  getIdempotencyKey: (p) => p.meeting_id ?? p.meetingId ?? null,
+  // Idempotencia SOLO para los eventos que procesan (summarized/legacy).
+  // Fireflies manda 2 webhooks por reunión con el mismo meeting_id; si el
+  // "meeting.transcribed" (que se saltea) ocupara la clave, bloquearía al
+  // "meeting.summarized" del mismo meeting. Por eso devuelve null para los
+  // eventos no procesables → no entran a la dedup del runner.
+  getIdempotencyKey: (p) => {
+    const event = p.event ?? p.eventType ?? null;
+    if (!isProcessableEvent(event)) return null;
+    return p.meeting_id ?? p.meetingId ?? null;
+  },
 
   async process(payload, ctx): Promise<HandlerResult> {
     // Normalización: aceptamos snake_case (Fireflies 2.0) y camelCase (doc/tests).
@@ -510,11 +533,7 @@ export const handler: WebhookHandler<Payload> = {
       };
     }
 
-    const processable =
-      ev === "" ||
-      ev.includes("summar") ||
-      ev.includes("transcription completed");
-    if (!processable) {
+    if (!isProcessableEvent(event)) {
       await ctx.logger.step(
         "evento_ignorado",
         "warn",
