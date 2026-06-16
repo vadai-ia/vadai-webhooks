@@ -19,13 +19,23 @@ import type { WebhookHandler, HandlerResult } from "./_types";
 // Fireflies manda SOLO punteros, no el contenido. El transcript + summary +
 // action items se piden después a la GraphQL API (ver lib/fireflies/client).
 
+// Fireflies "Webhook 2.0" manda snake_case: `meeting_id` + `event`
+// (ej. "meeting.transcribed", "meeting.summarized"). La doc histórica —y
+// nuestros tests con curl— usan `meetingId` + `eventType`. Aceptamos ambos
+// y normalizamos en `process`.
 const PayloadSchema = z
   .object({
-    meetingId: z.string().min(1),
+    meeting_id: z.string().min(1).optional(),
+    meetingId: z.string().min(1).optional(),
+    event: z.string().optional(),
     eventType: z.string().optional(),
     clientReferenceId: z.string().optional(),
   })
-  .passthrough();
+  .passthrough()
+  .refine((p) => !!(p.meeting_id || p.meetingId), {
+    message: "Falta meeting_id (o meetingId) en el payload",
+    path: ["meeting_id"],
+  });
 
 type Payload = z.infer<typeof PayloadSchema>;
 
@@ -468,31 +478,55 @@ export const handler: WebhookHandler<Payload> = {
   schema: PayloadSchema,
 
   // Reintentos de Fireflies sobre el mismo meeting → skipped_duplicate.
-  getIdempotencyKey: (p) => p.meetingId,
+  getIdempotencyKey: (p) => p.meeting_id ?? p.meetingId ?? null,
 
   async process(payload, ctx): Promise<HandlerResult> {
+    // Normalización: aceptamos snake_case (Fireflies 2.0) y camelCase (doc/tests).
+    const meetingId = (payload.meeting_id ?? payload.meetingId) as string;
+    const event = payload.event ?? payload.eventType ?? null;
+
     await ctx.logger.step("handler_start", "info", null, {
-      meeting_id: payload.meetingId,
-      event_type: payload.eventType ?? null,
+      meeting_id: meetingId,
+      event,
     });
 
-    // Solo procesamos eventos de transcripción completa.
-    if (payload.eventType && !/transcription/i.test(payload.eventType)) {
+    // Routing de eventos. Fireflies 2.0 manda DOS webhooks por reunión:
+    //   - "meeting.transcribed": transcripción lista, pero el summary (action
+    //     items) aún no → esperamos.
+    //   - "meeting.summarized": summary listo → procesamos.
+    // "Transcription completed" (doc histórica / tests con curl) y un payload
+    // sin `event` también se procesan.
+    const ev = (event ?? "").toLowerCase().trim();
+
+    if (ev === "meeting.transcribed") {
+      await ctx.logger.step(
+        "esperando_summary",
+        "info",
+        "meeting.transcribed recibido — se procesa en meeting.summarized",
+        { event }
+      );
+      return {
+        summary: { skipped: true, reason: "waiting_for_summary", event },
+      };
+    }
+
+    const processable =
+      ev === "" ||
+      ev.includes("summar") ||
+      ev.includes("transcription completed");
+    if (!processable) {
       await ctx.logger.step(
         "evento_ignorado",
         "warn",
-        `eventType '${payload.eventType}' no es de transcripción — skip`,
-        { event_type: payload.eventType }
+        `Evento '${event}' no procesable — skip`,
+        { event }
       );
-      return {
-        summary: { skipped: true, event_type: payload.eventType },
-        warning: true,
-      };
+      return { summary: { skipped: true, event }, warning: true };
     }
 
     // 1. Traer transcript + summary desde Fireflies.
     const ff = createFirefliesClient();
-    const t = await ff.getTranscript(payload.meetingId);
+    const t = await ff.getTranscript(meetingId);
     const dateStr = formatMeetingDate(t.date);
     await ctx.logger.step("fireflies_fetched", "success", t.title ?? null, {
       title: t.title,
@@ -514,7 +548,7 @@ export const handler: WebhookHandler<Payload> = {
     // 3. Odoo: chequeo de duplicados por meetingId (no por tag).
     const odoo = createVadaiOdooClient();
 
-    const existing = await tasksForMeeting(odoo, payload.meetingId);
+    const existing = await tasksForMeeting(odoo, meetingId);
     if (existing.length > 0) {
       await ctx.logger.step(
         "odoo_dup_check",
@@ -524,7 +558,7 @@ export const handler: WebhookHandler<Payload> = {
       );
       return {
         summary: {
-          meeting_id: payload.meetingId,
+          meeting_id: meetingId,
           title: t.title,
           skipped_existing_tasks: existing,
         },
@@ -534,11 +568,11 @@ export const handler: WebhookHandler<Payload> = {
 
     // Tag visible = nombre de la reunión (legible, agrupa las tareas del
     // meeting). El meetingId NO va en el tag: vive en la descripción.
-    const tagName = buildMeetingTag(t.title, dateStr, payload.meetingId);
+    const tagName = buildMeetingTag(t.title, dateStr, meetingId);
 
     // Sin action items: cerramos en completed con 0 tareas.
     const baseSummary: Record<string, unknown> = {
-      meeting_id: payload.meetingId,
+      meeting_id: meetingId,
       title: t.title,
       date: t.date ? new Date(t.date).toISOString() : null,
       date_legible: dateStr,

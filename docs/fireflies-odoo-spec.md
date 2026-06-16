@@ -7,12 +7,12 @@
 ## Flujo
 
 ```
-Fireflies (Transcription completed)
-  │  POST /in/wh_…  { meetingId, eventType, clientReferenceId? }
+Fireflies (meeting.summarized)
+  │  POST /in/wh_…  { event, timestamp, meeting_id }
   ▼
 runHandler → handler.process
-  1. Valida eventType (procesa "Transcription completed"; otros → warning/skip)
-  2. GraphQL a Fireflies: transcript(id: meetingId) → metadata + summary
+  1. Normaliza payload + routea evento (procesa summarized; skip transcribed)
+  2. GraphQL a Fireflies: transcript(id: meeting_id) → metadata + summary
   3. Parsea summary.action_items (string markdown) → items {assignee, text, timestamp}
   4. Odoo: proyectos candidatos LEVANTIA (name ilike) + proyecto Inbox + tag idempotencia
   5. OpenAI: por cada item → {project_id|null, title, deadline_offset_days, confidence, reasoning}
@@ -24,10 +24,28 @@ runHandler → handler.process
 
 El procesamiento corre en `after()` (vía `runHandler`); el POST responde 200 inmediato.
 
+## Payload real y routing de eventos
+
+Fireflies "Webhook 2.0" (User-Agent `Fireflies-Webhook/2.0`) manda **snake_case** y dispara
+**dos webhooks por reunión**:
+
+```json
+{ "event": "meeting.transcribed",  "timestamp": 1781288348349, "meeting_id": "01KT…" }
+{ "event": "meeting.summarized",   "timestamp": 1781288382228, "meeting_id": "01KT…" }
+```
+
+- `meeting.transcribed` → transcripción lista, summary aún no → **se saltea** (esperamos el summary).
+- `meeting.summarized` → summary + action items listos → **se procesa**.
+- `"Transcription completed"` (doc histórica / tests con curl) y un payload **sin `event`** también
+  se procesan.
+
+El schema acepta tanto `meeting_id`/`event` (real) como `meetingId`/`eventType` (doc/legacy) y
+normaliza en `process`.
+
 ## Por qué un segundo fetch a Fireflies
 
-El webhook **no trae el contenido**: solo `meetingId` + `eventType`. El transcript, el
-summary y los action items se piden a la GraphQL API
+El webhook **no trae el contenido**: solo el `meeting_id`. El transcript, el summary y los
+action items se piden a la GraphQL API
 (`https://api.fireflies.ai/graphql`, `Authorization: Bearer <FIREFLIES_API_KEY>`).
 
 > El "MCP server" de Fireflies (`docs.fireflies.ai/mcp`) **no** sirve acá: es solo
