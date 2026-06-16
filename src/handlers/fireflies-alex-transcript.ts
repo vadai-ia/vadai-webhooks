@@ -305,7 +305,11 @@ async function fetchLevantiaProjects(
   );
 }
 
-/** Proyecto Inbox de triage (por nombre). null si no existe. */
+/**
+ * Proyecto Inbox de triage (por nombre, case-insensitive). null si no existe.
+ * Usa `=ilike` (match exacto sin distinguir mayúsculas) para que "Inbox"
+ * encuentre también "INBOX" / "inbox".
+ */
 async function resolveInboxProjectId(
   odoo: OdooClient
 ): Promise<number | null> {
@@ -313,7 +317,7 @@ async function resolveInboxProjectId(
   const found = await odoo.executeKw<Array<{ id: number }>>(
     "project.project",
     "search_read",
-    [[["name", "=", name]]],
+    [[["name", "=ilike", name]]],
     { fields: ["id"], limit: 1 }
   );
   return found.length > 0 ? found[0].id : null;
@@ -821,10 +825,16 @@ export const handler: WebhookHandler<Payload> = {
       );
     }
 
-    // Warning si: hubo fallos, la IA cayó, o no había proyectos LEVANTIA
-    // (todo terminó en Inbox y conviene que Alex lo note).
+    // Warning si: hubo fallos, la IA cayó, no había proyectos LEVANTIA, o
+    // NINGÚN item matcheó un proyecto LEVANTIA (todo cayó en Inbox/privada y
+    // conviene que Alex lo note para triage).
+    const noneMatchedLevantia =
+      created.length > 0 && created.every((c) => c.routed_to !== "project");
     const warning =
-      failed.length > 0 || aiDegraded || candidates.length === 0;
+      failed.length > 0 ||
+      aiDegraded ||
+      candidates.length === 0 ||
+      noneMatchedLevantia;
     return { summary, warning };
   },
 };
