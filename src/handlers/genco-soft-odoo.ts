@@ -525,6 +525,19 @@ async function processVenta(
     // 8. Registrar pagos (uno a uno)
     const paymentsLog: VentaResult["payments"] = [];
     for (const pago of venta.Pagos) {
+      // Cortesías: el POS manda `EFECTIVO: 0`. La factura en $0 ya queda
+      // pagada al postear y Odoo rechaza registrar un pago sobre ella
+      // ("No queda nada por pagar"), lo que marcaba la venta como failed.
+      if (pago.Importe <= 0) {
+        await ctx.logger.step(
+          "payment_skipped",
+          "info",
+          `${pago.FormaPago} $${pago.Importe} — pago en cero, no se registra`,
+          { ref, forma: pago.FormaPago, importe: pago.Importe }
+        );
+        continue;
+      }
+
       const { journalId, fallback } = await resolveJournalForPayment(
         pago,
         mapping,
