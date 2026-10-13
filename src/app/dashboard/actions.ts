@@ -1,7 +1,9 @@
 "use server";
 
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { drainSkipped, stopDraining } from "@/lib/reprocess";
 import { createClient } from "@/lib/supabase/server";
 import {
   WEBHOOK_CONFIG_STATUSES,
@@ -100,6 +102,63 @@ export async function updateWebhookStatus(formData: FormData) {
   }
 
   revalidatePath("/dashboard");
+  revalidatePath(`/dashboard/${slug}`);
+}
+
+/**
+ * Arranca en background el drenado de ejecuciones `skipped_paused`.
+ * `limit` opcional para probar con pocas antes de soltar todo.
+ */
+export async function reprocessSkipped(formData: FormData) {
+  const slug = String(formData.get("slug") ?? "");
+  const limitRaw = Number(formData.get("limit") ?? 0);
+  if (!slug) throw new Error("Missing slug");
+
+  const sb = await createClient();
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  if (!user) redirect("/login");
+
+  // Leído con la sesión del usuario: si no está en la allowlist, RLS no
+  // devuelve el config y no arrancamos nada.
+  const { data: config } = await sb
+    .from("vw_configs")
+    .select("*")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (!config) throw new Error(`Webhook not found: ${slug}`);
+
+  after(async () => {
+    try {
+      await drainSkipped(config, limitRaw > 0 ? limitRaw : undefined);
+    } catch (e) {
+      console.error("[drainSkipped] uncaught", e);
+    }
+  });
+
+  revalidatePath(`/dashboard/${slug}`);
+}
+
+export async function stopReprocess(formData: FormData) {
+  const slug = String(formData.get("slug") ?? "");
+  if (!slug) throw new Error("Missing slug");
+
+  const sb = await createClient();
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  if (!user) redirect("/login");
+
+  // Mismo gate de allowlist vía RLS que reprocessSkipped.
+  const { data: config } = await sb
+    .from("vw_configs")
+    .select("slug")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (!config) throw new Error(`Webhook not found: ${slug}`);
+
+  stopDraining(slug);
   revalidatePath(`/dashboard/${slug}`);
 }
 

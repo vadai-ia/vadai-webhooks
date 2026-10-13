@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 import { notFound } from "next/navigation";
+import { isDraining } from "@/lib/reprocess";
 import { createClient } from "@/lib/supabase/server";
 import { StatusBadge } from "@/components/dashboard/status-badge";
 import { CopyButton } from "@/components/dashboard/copy-button";
 import { AutoRefresh } from "@/components/dashboard/auto-refresh";
-import { updateWebhookStatus } from "../actions";
+import { ConfirmSubmit } from "@/components/dashboard/confirm-submit";
+import { reprocessSkipped, stopReprocess, updateWebhookStatus } from "../actions";
 import type { WebhookConfigStatus } from "@/types/webhook";
 
 export const dynamic = "force-dynamic";
@@ -70,6 +72,13 @@ export default async function WebhookDetailPage({
     .eq("webhook_slug", slug)
     .order("received_at", { ascending: false })
     .range(offset, offset + PAGE_SIZE - 1);
+
+  const { count: skippedCount } = await sb
+    .from("vw_executions")
+    .select("id", { count: "exact", head: true })
+    .eq("webhook_slug", slug)
+    .eq("status", "skipped_paused");
+  const draining = isDraining(slug);
 
   const totalPages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
@@ -138,6 +147,14 @@ export default async function WebhookDetailPage({
           </div>
         </div>
       </div>
+
+      {((skippedCount ?? 0) > 0 || draining) && (
+        <ReprocessPanel
+          slug={config.slug}
+          pending={skippedCount ?? 0}
+          draining={draining}
+        />
+      )}
 
       {/* Executions */}
       <div className="rounded-lg border border-vadai-navy-light bg-vadai-navy-mid">
@@ -237,6 +254,59 @@ export default async function WebhookDetailPage({
   );
 }
 
+function ReprocessPanel({
+  slug,
+  pending,
+  draining,
+}: {
+  slug: string;
+  pending: number;
+  draining: boolean;
+}) {
+  const btn =
+    "rounded-md px-3 py-1.5 text-xs font-medium transition-colors";
+  const muted = `${btn} border border-vadai-navy-light text-vadai-muted hover:text-vadai-text hover:border-vadai-cyan/40`;
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-vadai-warning/30 bg-vadai-warning/10 px-5 py-3">
+      <p className="text-sm text-vadai-warning">
+        {draining
+          ? `Reprocesando en serie… quedan ${pending.toLocaleString("es-MX")}.`
+          : `${pending.toLocaleString("es-MX")} ejecuciones llegaron con el webhook pausado y no se procesaron.`}
+      </p>
+      <div className="flex items-center gap-2 shrink-0">
+        {draining ? (
+          <form action={stopReprocess}>
+            <input type="hidden" name="slug" value={slug} />
+            <button type="submit" className={muted}>
+              Detener
+            </button>
+          </form>
+        ) : (
+          <>
+            <form action={reprocessSkipped}>
+              <input type="hidden" name="slug" value={slug} />
+              <input type="hidden" name="limit" value="1" />
+              <button type="submit" className={muted}>
+                Probar con 1
+              </button>
+            </form>
+            <form action={reprocessSkipped}>
+              <input type="hidden" name="slug" value={slug} />
+              <ConfirmSubmit
+                message={`Se van a procesar ${pending} ejecuciones con el handler, de la más vieja a la más nueva. ¿Continuar?`}
+                className={`${btn} bg-vadai-cyan text-vadai-navy hover:bg-vadai-cyan-light`}
+              >
+                Reprocesar todas
+              </ConfirmSubmit>
+            </form>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function RefreshHint() {
   return (
     <span className="inline-flex items-center gap-1.5 text-xs text-vadai-muted">
@@ -296,16 +366,27 @@ function ActionForm({
       ? "bg-vadai-cyan text-vadai-navy hover:bg-vadai-cyan-light"
       : "border border-vadai-navy-light text-vadai-muted hover:text-vadai-text hover:border-vadai-cyan/40";
 
+  const className = `rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${cls}`;
+  const confirmMessage =
+    status === "paused"
+      ? "Pausado, el webhook sigue recibiendo pero descarta todo sin procesar. ¿Pausar?"
+      : status === "archived"
+        ? "Archivado, la URL responde 410 y el emisor deja de poder enviar. ¿Archivar?"
+        : null;
+
   return (
     <form action={updateWebhookStatus}>
       <input type="hidden" name="slug" value={slug} />
       <input type="hidden" name="status" value={status} />
-      <button
-        type="submit"
-        className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${cls}`}
-      >
-        {label}
-      </button>
+      {confirmMessage ? (
+        <ConfirmSubmit message={confirmMessage} className={className}>
+          {label}
+        </ConfirmSubmit>
+      ) : (
+        <button type="submit" className={className}>
+          {label}
+        </button>
+      )}
     </form>
   );
 }
