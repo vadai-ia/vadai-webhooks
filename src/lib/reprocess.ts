@@ -11,7 +11,15 @@ import type { WebhookConfig } from "@/types/webhook";
  * estado tiene que ver el mismo Set que la action que drena.
  */
 const g = globalThis as typeof globalThis & { __vwDraining?: Set<string> };
-const draining = (g.__vwDraining ??= new Set<string>());
+if (!g.__vwDraining) {
+  g.__vwDraining = new Set<string>();
+  // En un redeploy Railway manda SIGTERM: soltamos los drenados para que
+  // terminen la ejecución en curso y paren, en vez de cortarla a la mitad
+  // (una factura creada pero sin postear queda en draft y el reintento la
+  // salta por el check de `ref`). Se retoma con "Reprocesar todas".
+  process.once("SIGTERM", () => g.__vwDraining?.clear());
+}
+const draining = g.__vwDraining;
 
 export function isDraining(slug: string): boolean {
   return draining.has(slug);
