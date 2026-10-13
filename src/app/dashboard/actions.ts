@@ -20,6 +20,8 @@ function slugify(input: string): string {
     .slice(0, 60);
 }
 
+const RESERVED_SLUGS = new Set(["new", "admin", "docs"]);
+
 function generateToken(): string {
   return "wh_" + crypto.randomUUID().replace(/-/g, "");
 }
@@ -44,6 +46,11 @@ export async function createWebhook(formData: FormData) {
   const slug = slugify(slugInput || name);
   if (!slug) {
     redirect("/dashboard/new?error=slug");
+  }
+  // Rutas estáticas bajo /dashboard: un webhook con estos slugs quedaría
+  // tapado por ellas y su detalle sería inalcanzable.
+  if (RESERVED_SLUGS.has(slug)) {
+    redirect("/dashboard/new?error=slug-taken");
   }
 
   const token = generateToken();

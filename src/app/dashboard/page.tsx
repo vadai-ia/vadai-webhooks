@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus, Settings } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { StatusBadge } from "@/components/dashboard/status-badge";
 
@@ -106,13 +106,23 @@ export default async function DashboardPage() {
             {(configs?.length ?? 0) !== 1 ? "s" : ""}
           </p>
         </div>
-        <Link
-          href="/dashboard/new"
-          className="inline-flex items-center gap-2 rounded-md bg-vadai-cyan px-4 py-2 text-sm font-medium text-vadai-navy hover:bg-vadai-cyan-light transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          Nuevo webhook
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/dashboard/docs"
+            aria-label="Guía de recepción de webhooks"
+            title="Guía de recepción de webhooks"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-vadai-navy-light text-vadai-muted hover:text-vadai-text hover:border-vadai-cyan/40 transition-colors"
+          >
+            <Settings className="h-4 w-4" />
+          </Link>
+          <Link
+            href="/dashboard/new"
+            className="inline-flex items-center gap-2 rounded-md bg-vadai-cyan px-4 py-2 text-sm font-medium text-vadai-navy hover:bg-vadai-cyan-light transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Nuevo webhook
+          </Link>
+        </div>
       </div>
 
       {(configs?.length ?? 0) === 0 ? (

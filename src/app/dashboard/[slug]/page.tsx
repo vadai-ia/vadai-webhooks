@@ -136,9 +136,17 @@ export default async function WebhookDetailPage({
         </div>
 
         <div>
-          <p className="text-xs uppercase tracking-wide text-vadai-muted">
-            URL de ingestión (POST)
-          </p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs uppercase tracking-wide text-vadai-muted">
+              URL de ingestión (POST)
+            </p>
+            <Link
+              href={`/dashboard/docs?webhook=${config.slug}`}
+              className="text-xs text-vadai-cyan hover:text-vadai-cyan-light"
+            >
+              Guía de conexión →
+            </Link>
+          </div>
           <div className="mt-1.5 flex items-center gap-2">
             <code className="flex-1 truncate rounded-md bg-vadai-navy-light/40 border border-vadai-navy-light px-3 py-2 text-sm font-mono text-vadai-text">
               {fullUrl}
